@@ -1,0 +1,7 @@
+yeaz_data/
+venv/
+cgan_env/
+yeaz_dataset/
+__pycache__/
+yeast_model_output/
+.DS_Store
