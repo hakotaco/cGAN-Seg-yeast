@@ -1,7 +1,9 @@
 yeaz_data/
 venv/
+tmp/
 cgan_env/
 yeaz_dataset/
 __pycache__/
 yeast_model_output/
 .DS_Store
+gold-standard-BF-V-1.tar.gz
