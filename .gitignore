@@ -8,3 +8,4 @@ yeast_model_output/
 .DS_Store
 gold-standard-BF-V-1.tar.gz
 logs/
+tmp_long/

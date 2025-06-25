@@ -1,6 +1,8 @@
 # Import the necessary libraries and modules
 import os
 import argparse
+import signal
+import sys
 from unet_models import UnetSegmentation,StyleUnetGenerator,NLayerDiscriminator,DeepSea
 from cellpose_model import Cellpose_CPnet
 from utils import set_requires_grad,mixed_list,noise_list,image_noise,initialize_weights
@@ -26,6 +28,29 @@ np.random.seed(SEED)
 torch.manual_seed(SEED)
 torch.cuda.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
+
+# Global variables for signal handler
+checkpoint_models = None
+checkpoint_output_dir = None
+
+def save_final_checkpoint(signum, frame):
+    """Signal handler to save checkpoint before job termination"""
+    if checkpoint_models is not None and checkpoint_output_dir is not None:
+        print(f"\nReceived signal {signum}. Saving final checkpoint...")
+        Gen, Seg, D1, D2 = checkpoint_models
+        try:
+            torch.save(Gen.state_dict(), os.path.join(checkpoint_output_dir, 'Gen_final.pth'))
+            torch.save(Seg.state_dict(), os.path.join(checkpoint_output_dir, 'Seg_final.pth'))
+            torch.save(D1.state_dict(), os.path.join(checkpoint_output_dir, 'D1_final.pth'))
+            torch.save(D2.state_dict(), os.path.join(checkpoint_output_dir, 'D2_final.pth'))
+            print(f"Final checkpoint saved to {checkpoint_output_dir}")
+        except Exception as e:
+            print(f"Error saving final checkpoint: {e}")
+    sys.exit(0)
+
+# Register signal handlers
+signal.signal(signal.SIGTERM, save_final_checkpoint)  # SLURM sends SIGTERM
+signal.signal(signal.SIGUSR1, save_final_checkpoint)  # Additional signal
 
 # Function to reset logging configuration
 def reset_logging():
@@ -124,6 +149,11 @@ def train(args,image_size = [512,768],image_means = [0.5],image_stds= [0.5],trai
     D1 = D1.to(device)
     D2 = D2.to(device)
 
+    # Set global variables for signal handler
+    global checkpoint_models, checkpoint_output_dir
+    checkpoint_models = (Gen, Seg, D1, D2)
+    checkpoint_output_dir = args.output_dir
+
     d_criterion=d_criterion.to(device)
     Gen_criterion_1=Gen_criterion_1.to(device)
     Gen_criterion_2 = Gen_criterion_2.to(device)
@@ -132,6 +162,10 @@ def train(args,image_size = [512,768],image_means = [0.5],image_stds= [0.5],trai
     # Training loop
     nstop=0
     avg_fscore_best=0
+    import time
+    start_time = time.time()
+    last_checkpoint_time = start_time
+    
     logging.info('>>>> Start training')
     print('INFO: Start training ...')
     for epoch in range(args.max_epoch):
@@ -240,6 +274,18 @@ def train(args,image_size = [512,768],image_means = [0.5],image_stds= [0.5],trai
             nstop=0
         elif scores['avg_fscore'] is not None and scores['avg_fscore']<=avg_fscore_best:
             nstop+=1
+            
+        # Save periodic checkpoint every 4 hours
+        current_time = time.time()
+        if current_time - last_checkpoint_time >= 4 * 3600:  # 4 hours = 14400 seconds
+            print(f'INFO: Saving periodic checkpoint at epoch {epoch} (after {(current_time - start_time)/3600:.1f} hours)')
+            torch.save(Gen.state_dict(), os.path.join(args.output_dir, f'Gen_epoch_{epoch}.pth'))
+            torch.save(Seg.state_dict(), os.path.join(args.output_dir, f'Seg_epoch_{epoch}.pth'))
+            torch.save(D1.state_dict(), os.path.join(args.output_dir, f'D1_epoch_{epoch}.pth'))
+            torch.save(D2.state_dict(), os.path.join(args.output_dir, f'D2_epoch_{epoch}.pth'))
+            last_checkpoint_time = current_time
+            logging.info(f'>>>> Saved periodic checkpoint at epoch {epoch}')
+            
         if nstop==args.patience:#Early Stopping
             print('INFO: Early Stopping met ...')
             print('INFO: Finish training process')

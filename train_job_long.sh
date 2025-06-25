@@ -6,7 +6,7 @@
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=2
 #SBATCH --gres=gpu:v100:1
-#SBATCH --mem=8G
+#SBATCH --mem=4G
 #SBATCH --time=24:00:00
 #SBATCH --output=/home2/s5946301/cGAN-Seg-yeast/logs/train_job_long_%j.out
 #SBATCH --error=/home2/s5946301/cGAN-Seg-yeast/logs/train_job_long_%j.err
@@ -54,8 +54,8 @@ python train.py \
     --lr 0.0001 \
     --p_vanilla 0.2 \
     --p_diff 0.2 \
-    --patience 200 \
-    --output_dir tmp/
+    --patience 500 \
+    --output_dir tmp_long/
 
 echo ""
 echo "Job finished at: $(date)"
