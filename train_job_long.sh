@@ -8,16 +8,16 @@
 #SBATCH --gres=gpu:v100:1
 #SBATCH --mem=8G
 #SBATCH --time=24:00:00
-#SBATCH --output=logs/train_job_long_%j.out
-#SBATCH --error=logs/train_job_long_%j.err
+#SBATCH --output=/home2/s5946301/cGAN-Seg-yeast/logs/train_job_long_%j.out
+#SBATCH --error=/home2/s5946301/cGAN-Seg-yeast/logs/train_job_long_%j.err
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
 
-# Load necessary modules (adjust based on your cluster's available modules)
+# Load necessary modules
 module purge
-module load Python/3.8.6-GCCcore-10.2.0
-module load CUDA/11.1.1-GCC-10.2.0
+module load Python/3.11.5-GCCcore-13.2.0
+module load CUDA/12.4.0
 
 # Print job information
 echo "Job ID: $SLURM_JOB_ID"
@@ -36,8 +36,8 @@ mkdir -p $TMPDIR
 # Navigate to the project directory
 cd /home2/s5946301/cGAN-Seg-yeast
 
-# Activate virtual environment if you have one
-# source venv/bin/activate  # Uncomment if you use a virtual environment
+# Activate virtual environment
+source venv/bin/activate
 
 # Print Python and CUDA information
 echo "Python version:"
