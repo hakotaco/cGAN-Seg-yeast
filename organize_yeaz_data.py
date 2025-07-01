@@ -133,7 +133,7 @@ def main():
     print(f"✅ Found {len(pairs)} complete image-mask pairs")
     
     # Split data
-    train_names, test_names = split_data(pairs, train_ratio=0.9)
+    train_names, test_names = split_data(pairs, train_ratio=0.95)
     
     print(f"📊 Split: {len(train_names)} train, {len(test_names)} test")
     print(f"   Train ratio: {len(train_names)/(len(train_names)+len(test_names)):.2%}")

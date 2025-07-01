@@ -9,3 +9,4 @@ yeast_model_output/
 gold-standard-BF-V-1.tar.gz
 logs/
 tmp_long/
+test_results*/
