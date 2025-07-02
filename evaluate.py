@@ -29,7 +29,9 @@ def evaluate_segmentation(net, valid_iterator, device,criterion,n_valid_examples
             true_masks = true_masks.to(device=device, dtype=torch.long)
             true_masks = torch.squeeze(true_masks, dim=1)
             true_masks_copy = copy.deepcopy(true_masks)
-            true_masks_one_hot = F.one_hot(true_masks, net.n_classes).permute(0, 3, 1, 2).float()
+            # Handle DataParallel wrapper
+            n_classes = net.module.n_classes if hasattr(net, 'module') else net.n_classes
+            true_masks_one_hot = F.one_hot(true_masks, n_classes).permute(0, 3, 1, 2).float()
 
             with torch.no_grad():
                 # predict the mask

@@ -10,3 +10,6 @@ gold-standard-BF-V-1.tar.gz
 logs/
 tmp_long/
 test_results*/
+test_*/
+imp_train/yeaz_dataset_fixed/
+tmp_*

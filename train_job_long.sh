@@ -1,15 +1,15 @@
 #!/bin/bash
 
-#SBATCH --job-name=cGAN-Seg-yeast-long
+#SBATCH --job-name=cGAN-Seg-yeast-A100
 #SBATCH --partition=gpulong
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=2
-#SBATCH --gres=gpu:v100:1
-#SBATCH --mem=4G
-#SBATCH --time=24:00:00
-#SBATCH --output=/home2/s5946301/cGAN-Seg-yeast/logs/train_job_long_%j.out
-#SBATCH --error=/home2/s5946301/cGAN-Seg-yeast/logs/train_job_long_%j.err
+#SBATCH --cpus-per-task=4
+#SBATCH --gres=gpu:a100:1
+#SBATCH --mem=8G
+#SBATCH --time=48:00:00
+#SBATCH --output=/home2/s5946301/cGAN-Seg-yeast/logs/train_job_A100_%j.out
+#SBATCH --error=/home2/s5946301/cGAN-Seg-yeast/logs/train_job_A100_%j.err
 
 # Create logs directory if it doesn't exist
 mkdir -p logs
@@ -46,16 +46,17 @@ echo "CUDA devices:"
 nvidia-smi
 echo ""
 
-# Run the training command with optimized patience
-echo "Starting cGAN-Seg training (with early stopping)..."
+# Run the training command with optimized settings for A100
+echo "Starting cGAN-Seg training on A100 GPU (with early stopping)..."
 python train.py \
     --seg_model DeepSea \
     --train_set_dir yeaz_dataset/train/ \
     --lr 0.0001 \
+    --batch_size 4 \
     --p_vanilla 0.2 \
     --p_diff 0.2 \
     --patience 500 \
-    --output_dir tmp_long/
+    --output_dir tmp_A100/
 
 echo ""
 echo "Job finished at: $(date)"
