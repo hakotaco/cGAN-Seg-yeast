@@ -45,29 +45,6 @@ torch.manual_seed(SEED)
 torch.cuda.manual_seed(SEED)
 torch.backends.cudnn.deterministic = True
 
-# Global variables for signal handler
-checkpoint_models = None
-checkpoint_output_dir = None
-
-def save_final_checkpoint(signum, frame):
-    """Signal handler to save checkpoint before job termination"""
-    if checkpoint_models is not None and checkpoint_output_dir is not None:
-        print(f"\nReceived signal {signum}. Saving final checkpoint...")
-        Gen, Seg, D1, D2 = checkpoint_models
-        try:
-            torch.save(Gen.state_dict(), os.path.join(checkpoint_output_dir, 'Gen_final.pth'))
-            torch.save(Seg.state_dict(), os.path.join(checkpoint_output_dir, 'Seg_final.pth'))
-            torch.save(D1.state_dict(), os.path.join(checkpoint_output_dir, 'D1_final.pth'))
-            torch.save(D2.state_dict(), os.path.join(checkpoint_output_dir, 'D2_final.pth'))
-            print(f"Final checkpoint saved to {checkpoint_output_dir}")
-        except Exception as e:
-            print(f"Error saving final checkpoint: {e}")
-    sys.exit(0)
-
-# Register signal handlers
-signal.signal(signal.SIGTERM, save_final_checkpoint)  # SLURM sends SIGTERM
-signal.signal(signal.SIGUSR1, save_final_checkpoint)  # Additional signal
-
 # Function to reset logging configuration
 def reset_logging():
     for handler in logging.root.handlers[:]:
@@ -203,6 +180,7 @@ def train_yeast_optimized(args, image_size=[512,768], image_means=[0.5], image_s
     initialize_weights(D2)
 
     # Define the optimizers with slightly lower learning rate for better stability
+    # Also add weight decay to prevent overfitting
     optimizer_G = torch.optim.Adam(itertools.chain(Gen.parameters(), Seg.parameters()), 
                                   lr=args.lr, betas=(0.5, 0.999), weight_decay=1e-5)
     optimizer_D1 = torch.optim.Adam(D1.parameters(), lr=args.lr, betas=(0.5, 0.999))
@@ -226,11 +204,6 @@ def train_yeast_optimized(args, image_size=[512,768], image_means=[0.5], image_s
     D1 = D1.to(device)
     D2 = D2.to(device)
 
-    # Set global variables for signal handler
-    global checkpoint_models, checkpoint_output_dir
-    checkpoint_models = (Gen, Seg, D1, D2)
-    checkpoint_output_dir = args.output_dir
-
     d_criterion = d_criterion.to(device)
     Gen_criterion_1 = Gen_criterion_1.to(device)
     Gen_criterion_2 = Gen_criterion_2.to(device)
@@ -242,7 +215,6 @@ def train_yeast_optimized(args, image_size=[512,768], image_means=[0.5], image_s
     dice_score_best = 0
     import time
     start_time = time.time()
-    last_checkpoint_time = start_time
     
     # Track losses for better monitoring
     g_losses = []
@@ -310,11 +282,10 @@ def train_yeast_optimized(args, image_size=[512,768], image_means=[0.5], image_s
                 d_img_loss = d_criterion(D1(DiffAugment(fake_img, p=args.p_diff)), valid)
                 d_mask_loss = d_criterion(D2(fake_mask_p), valid)
                 
-                # Adjusted loss weights for better yeast cell segmentation
-                rec_mask_loss = 150 * Seg_criterion(rec_mask, torch.squeeze(real_mask.to(dtype=torch.long), dim=1))  # Increased weight
-                id_mask_loss = 75 * Seg_criterion(fake_mask, torch.squeeze(real_mask.to(dtype=torch.long), dim=1))   # Increased weight
-                rec_img_loss = 40 * Gen_criterion_1(rec_img, real_img) + 80 * Gen_criterion_2(rec_img, real_img)    # Slightly reduced
-                id_img_loss = 20 * Gen_criterion_1(fake_img, real_img) + 40 * Gen_criterion_2(fake_img, real_img)   # Slightly reduced
+                rec_mask_loss=100 * Seg_criterion(rec_mask, torch.squeeze(real_mask.to(dtype=torch.long), dim=1))
+                id_mask_loss = 50 * Seg_criterion(fake_mask, torch.squeeze(real_mask.to(dtype=torch.long), dim=1))
+                rec_img_loss=50 * Gen_criterion_1(rec_img, real_img)+100 * Gen_criterion_2(rec_img, real_img)
+                id_img_loss = 25 * Gen_criterion_1(fake_img, real_img)+50 * Gen_criterion_2(fake_img, real_img)
                 
                 g_loss = d_mask_loss + d_img_loss + rec_mask_loss + rec_img_loss + id_mask_loss + id_img_loss
 
@@ -406,17 +377,6 @@ def train_yeast_optimized(args, image_size=[512,768], image_means=[0.5], image_s
         else:
             nstop += 1
             
-        # Save periodic checkpoint every 4 hours
-        current_time = time.time()
-        if current_time - last_checkpoint_time >= 4 * 3600:  # 4 hours
-            print(f'INFO: Saving periodic checkpoint at epoch {epoch+1} (after {(current_time - start_time)/3600:.1f} hours)')
-            torch.save(Gen.state_dict(), os.path.join(args.output_dir, f'Gen_epoch_{epoch+1}.pth'))
-            torch.save(Seg.state_dict(), os.path.join(args.output_dir, f'Seg_epoch_{epoch+1}.pth'))
-            torch.save(D1.state_dict(), os.path.join(args.output_dir, f'D1_epoch_{epoch+1}.pth'))
-            torch.save(D2.state_dict(), os.path.join(args.output_dir, f'D2_epoch_{epoch+1}.pth'))
-            last_checkpoint_time = current_time
-            logging.info(f'>>>> Saved periodic checkpoint at epoch {epoch+1}')
-            
         # Enhanced early stopping with better criteria
         if nstop == args.patience:
             print('INFO: Early Stopping met ...')
@@ -447,7 +407,7 @@ if __name__ == "__main__":
     ap.add_argument("--p_vanilla", default=0.15, type=float, help="probability value of vanilla augmentation (reduced for yeast)")
     ap.add_argument("--p_diff", default=0.15, type=float, help="probability value of diff augmentation (reduced for yeast)")
     ap.add_argument("--seg_model", required=True, type=str, help="segmentation model type (DeepSea or CellPose or UNET)")
-    ap.add_argument("--patience", default=200, type=int, help="Number of patience epochs for early stopping (reduced)")
+    ap.add_argument("--patience", default=500, type=int, help="Number of patience epochs for early stopping")
     ap.add_argument("--gen_nc", default=1, type=int, help="1 for 2D or 3 for 3D, the number of generator output channels")
 
     # Parse the command-line arguments
